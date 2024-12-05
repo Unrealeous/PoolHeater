@@ -7,38 +7,44 @@ PoolHeater::PoolHeater() :
   mLowPressureSwitchAlarm(1),
   mHighPressureSwitchAlarm(1),
   mWaterFlowSwitchAlarm(1),
-  mPoolLink(I2C_POOL_HEATER)
+  mPoolLink(I2C_POOL_HEATER, true)
 {
 }
 
 void PoolHeater::Configure()
 {
-  Wire.begin();
-  mPoolLink.setConfigurationGroup0(0x00);  // All pins READ
-  mPoolLink.setConfigurationGroup1(0xFF);  // All pins WRITE
+  mPoolLink.setConfigurationGroup0(0x00);  // 1 is read, 0 is write.  All pins READ
+  mPoolLink.setConfigurationGroup1(0xFF);  // 1 is read, 0 is write.  All pins READ
 }
 
 bool PoolHeater::ReadInputData()
 {
-  mConnected = false;
+  mConnected = true;
 
-  while(Wire.available())
-  {
-    const uint8_t HEAT_EXCHANGE_THERMAL_CUTOFF =16;
-    const uint8_t COMPRESSOR_THERMAL_CUTOFF    =8;
-    const uint8_t LOW_PRESSURE_SWITCH          =4;
-    const uint8_t HIGH_PRESSURE_SWITCH         =2;
-    const uint8_t WATER_FLOW_SWITCH            =1;
+  uint8_t data = mPoolLink.readInputGpioGroup1();
 
-    uint8_t data = mPoolLink.readInputGpioGroup1();
+  mHeatExchangerThermalCutoffAlarm = data & HEAT_EXCHANGE_THERMAL_CUTOFF;
+  mCompressorThermalCutoffAlarm = data & COMPRESSOR_THERMAL_CUTOFF;
+  mLowPressureSwitchAlarm = data & LOW_PRESSURE_SWITCH;
+  mHighPressureSwitchAlarm = data & HIGH_PRESSURE_SWITCH;
+  mWaterFlowSwitchAlarm = data & WATER_FLOW_SWITCH;
 
-    mHeatExchangerThermalCutoffAlarm = data & HEAT_EXCHANGE_THERMAL_CUTOFF;
-    mCompressorThermalCutoffAlarm = data & COMPRESSOR_THERMAL_CUTOFF;
-    mLowPressureSwitchAlarm = data & LOW_PRESSURE_SWITCH;
-    mHighPressureSwitchAlarm = data & HIGH_PRESSURE_SWITCH;
-    mWaterFlowSwitchAlarm = data & WATER_FLOW_SWITCH;
-
-    mConnected = true;
-  }
   return mConnected;
+}
+
+bool PoolHeater::AnyAlarmsPresent()
+{
+  return  GetHeatExchangerThermalCutoffAlarm() ||
+          GetCompressorThermalCutoffAlarm() ||
+          GetLowPressureSwitchAlarm() ||
+          GetHighPressureSwitchAlarm() ||
+          GetWaterFlowSwitchAlarm();
+}
+
+void PoolHeater::TurnFanOn(bool turnOn)
+{
+  if (turnOn)
+    mPoolLink.writeGpioGroup0(FAN);
+  else
+    mPoolLink.writeGpioGroup0(0);
 }

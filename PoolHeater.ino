@@ -5,23 +5,33 @@
 #include <PubSubClient.h>
 
 #include "PoolHeater.h"
+#include "Passwords.h"
 
-const char *ssid = "dlink-9C63E8";
-const char *password = "6f7jbcwpvp";
+// The dlink is not connected to anything important.
+// Normally you'd hide passwords.
+extern const char *ssid;
+extern const char *ssid_password;
+
 
 // MQTT Broker
 const char *mqtt_broker = "10.1.1.205";
-const char *topic = "PoolHeater";
-const char *mqtt_username = "";
-const char *mqtt_password = "";
+extern const char *mqtt_username;
+extern const char *mqtt_password;
 const int mqtt_port = 1883;
+const char *topicHeatExchangerThermalCutoffAlarm  = "PoolHeater/HeatExchangerThermalCutoff";
+const char *topicCompressorThermalCutoffAlarm     = "PoolHeater/CompressorThermalCutoff";
+const char *topicLowPressureSwitchAlarm           = "PoolHeater/LowPressureSwitch";
+const char *topicHighPressureSwitchAlarm          = "PoolHeater/HighPressureSwitch";
+const char *topicWaterFlowPressure                = "PoolHeater/WaterFlowPressure";
 
 bool ledOn = false;
+int counter = 0;
 
 //NetworkServer server(80);
 
 WiFiClient espClient;
 PubSubClient mqclient(espClient);
+
 
 PoolHeater poolHeater;
 
@@ -34,6 +44,11 @@ void mqcallback(char *topic, byte *payload, unsigned int length) {
     }
     Serial.println();
     Serial.println("-----------------------");
+}
+
+inline const char * const BoolToString(bool b)
+{
+  return b ? "{\"value\": 1}" : "{\"value\": 0}";
 }
 
 void setup() {
@@ -49,7 +64,7 @@ void setup() {
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
-  WiFi.begin(ssid, password);
+  WiFi.begin(ssid, ssid_password);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -61,17 +76,11 @@ void setup() {
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
 
-  //server.begin();
-
-  // Start the WIRE (I2C) library to use the poolHeater class
-  poolHeater.Configure();
-
   mqclient.setServer(mqtt_broker, mqtt_port);
   mqclient.setCallback(mqcallback);
 
   while (!mqclient.connected()) {
-      String client_id = "esp32-client-";
-      client_id += String(WiFi.macAddress());
+      String client_id = "PoolHeater";
       Serial.printf("The client %s connects to the public MQTT broker\n", client_id.c_str());
       if (mqclient.connect(client_id.c_str(), mqtt_username, mqtt_password)) {
           Serial.println("Public EMQX MQTT broker connected");
@@ -82,7 +91,10 @@ void setup() {
       }
   }
 
-  mqclient.publish(topic, "Startup mode");
+  // Start the WIRE (I2C) library to use the poolHeater class
+  poolHeater.Configure();
+
+
 }
 
 
@@ -170,11 +182,47 @@ void loop() {
   delay(1500);
   */
 
-  delay(1500);
-  Serial.println("Before the mqclient loop ");
-  mqclient.loop();
-  Serial.println("After the mqclient loop ");
-  poolHeater.ReadInputData();
+  delay(4500);
+  //mqclient.loop();
+  if (poolHeater.ReadInputData())
+  {
+    Serial.print("HeatExThermal: ");
+    Serial.print(poolHeater.GetHeatExchangerThermalCutoffAlarm());
+    Serial.print(" CompressorThermal: ");
+    Serial.print(poolHeater.GetCompressorThermalCutoffAlarm());
+    Serial.print(" LowPressure: ");
+    Serial.print(poolHeater.GetLowPressureSwitchAlarm());
+    Serial.print(" HighPressure: ");
+    Serial.print(poolHeater.GetHighPressureSwitchAlarm());
+    Serial.print(" WaterFlowPressure: ");
+    Serial.println(poolHeater.GetWaterFlowSwitchAlarm());
+
+    mqclient.publish(topicHeatExchangerThermalCutoffAlarm, BoolToString(poolHeater.GetHeatExchangerThermalCutoffAlarm()));
+    mqclient.publish(topicCompressorThermalCutoffAlarm, BoolToString(poolHeater.GetCompressorThermalCutoffAlarm()));
+    mqclient.publish(topicLowPressureSwitchAlarm, BoolToString(poolHeater.GetLowPressureSwitchAlarm()));
+    mqclient.publish(topicHighPressureSwitchAlarm, BoolToString(poolHeater.GetHighPressureSwitchAlarm()));
+    mqclient.publish(topicWaterFlowPressure, BoolToString(poolHeater.GetWaterFlowSwitchAlarm()));
+
+    if (poolHeater.AnyAlarmsPresent())
+    {
+      Serial.println("Heater cannot be turned on at this time due to alarms");
+    }
+  }
+  else
+  {
+    Serial.println("Failed to read any data");
+  }
+
+  if (ledOn)
+  {
+    ledOn = false;
+    poolHeater.TurnFanOn(true);
+  }
+  else
+  {
+    ledOn = true;
+    poolHeater.TurnFanOn(false);
+  }
 
 }
 
