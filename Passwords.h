@@ -7,4 +7,5 @@ const char *ssid_password = "6f7jbcwpvp";
 // MQTT Broker
 const char *mqtt_username = "";
 const char *mqtt_password = "";
+
 #endif

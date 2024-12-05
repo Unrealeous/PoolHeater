@@ -13,6 +13,9 @@ T myXOR(T x, T y)
    return (x | y) & (~x | ~y);
 }
 
+
+// The class to control the SPANet
+// We have an I2C link to read parameters and turn on/off relays
 class PoolHeater
 {
 public:
@@ -60,6 +63,8 @@ private:
     FAN           = 4,
     COMPRESSOR    = 8
   };
+
+  uint8_t mRelaySettings=0;
 };
 
 

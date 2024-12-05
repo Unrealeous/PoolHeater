@@ -44,7 +44,14 @@ bool PoolHeater::AnyAlarmsPresent()
 void PoolHeater::TurnFanOn(bool turnOn)
 {
   if (turnOn)
-    mPoolLink.writeGpioGroup0(FAN);
+  {
+    mRelaySettings = mRelaySettings | FAN;
+    mPoolLink.writeGpioGroup0(mRelaySettings);
+  }
   else
+  {
+    if (mRelaySettings & FAN)
+      mRelaySettings = mRelaySettings ^ FAN;
     mPoolLink.writeGpioGroup0(0);
+  }
 }
