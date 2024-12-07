@@ -50,11 +50,13 @@ public:
   struct Permissives_struct
   {
     bool PriceOk = false;
-    bool TimeOk = false;;
+    bool SOCOk = false;
+    bool TimeOk = false;
     bool MqTTLinkOk = false;
   };
 
   void SetPermissivesPrice(bool isOk);
+  void SetPermissivesSOC(bool isOK);
   void SetPermissivesDateTime(bool isOk);
   void SetPermissivesMQLink(bool isOk);
 

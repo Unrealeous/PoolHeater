@@ -93,6 +93,10 @@ void PoolHeater::SetPermissivesPrice(bool isOk)
 {
   mPermissives.PriceOk = isOk;
 }
+void PoolHeater::SetPermissivesSOC(bool isOk)
+{
+  mPermissives.SOCOk = isOk;
+}
 void PoolHeater::SetPermissivesDateTime(bool isOk)
 {
   mPermissives.TimeOk = isOk;
@@ -104,6 +108,7 @@ void PoolHeater::SetPermissivesMQLink(bool isOk)
 bool PoolHeater::GetPermissivesOk() const
 {
   return mPermissives.PriceOk && 
+         mPermissives.SOCOk &&
          mPermissives.TimeOk && 
          mPermissives.MqTTLinkOk;
 }

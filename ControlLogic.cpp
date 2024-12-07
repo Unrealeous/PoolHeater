@@ -1,6 +1,7 @@
 #include "ControlLogic.h"
 
 #include <sstream>
+#include <ArduinoJson.h>
 #include "Passwords.h"
 
 // The dlink is not connected to anything important.
@@ -30,6 +31,7 @@ const char *topicPermissiveMQTT                   = "PoolHeater/Permissive/MQTT"
 
 const char *subPowerwallPrice                     = "Powerwall/Price";
 const char *subPowerwallTime                      = "Powerwall/Time";
+const char *subPowerwallSOC                       = "Powerwall/SOC";    // State of charge
 
 
 bool ledOn = false;
@@ -78,6 +80,8 @@ void ControlLogic::Configure()
   // If we can't connect, it won't go further.
   while (!ConnectMQTT());
 
+  HandleMQTTLinkChange(true);
+
   // Start the WIRE (I2C) library to use the poolHeater class
   poolHeater.Configure();
 }
@@ -111,13 +115,18 @@ bool ControlLogic::ConnectMQTT()
   {
     Serial.print("Subscribed to MQTT topic ");
     Serial.println(subPowerwallTime);
-  }  
+  }
+  if (mqclient.subscribe(subPowerwallSOC, 0))
+  {
+    Serial.print("Subscribed to MQTT topic ");
+    Serial.println(subPowerwallSOC);
+  }   
   return true;
 }
 
 void ControlLogic::loop()
 {
-  static uint8_t count = 0;
+  static uint8_t delayCount = 0;
 
   poolHeater.ReadInputData();
 
@@ -142,8 +151,8 @@ void ControlLogic::loop()
   Serial.println(poolHeater.GetCompressorFB());
 
   // We don't want to send this stuff every second, 10 seconds will do
-  count = count + 1 % 10;
-  if (!count)
+  delayCount = (delayCount + 1) % 10;
+  if (!delayCount)
   {
     mqclient.publish(topicHeatExchangerThermalCutoffAlarm, BoolToString(poolHeater.GetHeatExchangerThermalCutoffAlarm()));
     mqclient.publish(topicCompressorThermalCutoffAlarm, BoolToString(poolHeater.GetCompressorThermalCutoffAlarm()));
@@ -247,56 +256,98 @@ void ControlLogic::mqcallback(char *topic, byte *payload, unsigned int length)
     if (strcmp("Powerwall/Price", topic) == 0)
     {
       Serial.println("We have a price");
-      moPrice = charArrayToFloat(payload, length);
-      if (moPrice)
-        Serial.println(*moPrice);
+      std::optional<float> price = charArrayToFloat(payload, length);
+      HandleNewPrice(price);
     }
-
-    if (strcmp("Powerwall/Price", topic) == 0)
+    else if (strcmp("Powerwall/Time", topic) == 0)
     {
-      Serial.println("We have a Time");
+      // Allocate the JSON document
+      JsonDocument doc;
+
+      // Deserialize the JSON document
+      DeserializationError error = deserializeJson(doc, payload);
+
+      // Test if parsing succeeds
+      if (error) {
+        Serial.print(F("deserializeJson() of datetime failed: "));
+        Serial.println(error.f_str());
+        return;
+      }
+      else
+      {
+        long hour = doc["hour"];
+        long min  = doc["minutes"];
+        long month = doc["month"];
+        Serial.print("We have a Time ");
+        Serial.print(hour);
+        Serial.print(" ");
+        Serial.print(min);
+        Serial.print(" ");
+        Serial.print(month);
+        HandleNewDateTime(month, hour, min);
+      }      
+    }
+    else if (strcmp("Powerwall/SOC", topic) == 0)
+    {
+      Serial.println("We have a SOC");
+      std::optional<float> SOC = charArrayToFloat(payload, length);
+      HandleNewSOC(SOC);
     }
 }
 
-  void ControlLogic::HandleNewPrice(float price)
+void ControlLogic::HandleNewPrice(std::optional<float> price)
+{
+  // We don't pay too much.
+  if (!price || *price > 25.0)
+    poolHeater.SetPermissivesPrice(false);
+  else
   {
-    // We don't pay too much.
-    if (price > 30.0)
-      poolHeater.SetPermissivesPrice(false);
-    else
+    if (*price < 20.0)
       poolHeater.SetPermissivesPrice(true);
   }
+}
 
-  void ControlLogic::HandleNewDateTime(uint8_t month, uint8_t hour, uint8_t minute)
+void ControlLogic::HandleNewSOC(std::optional<float> SOC)
+{
+  // We don't pay too much.
+  if (!SOC || *SOC < 70.0)
+    poolHeater.SetPermissivesSOC(false);
+  else
   {
-      bool isOk = true;
-      switch(month)
-      {
-        case 11:
-        case 12:
-        case 1:
-        case 2:
-        case 3:
-          break;
-        default:
-          isOk = false;
-      }
-      switch(hour)
-      {
-        case 11:
-        case 12:
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-          break;
-        default:
-          isOk = false;
-      }
-      poolHeater.SetPermissivesDateTime(true);
+    poolHeater.SetPermissivesSOC(true);
   }
+}
 
-  void ControlLogic::HandleMQTTLinkChange(bool isUp)
-  {
-      poolHeater.SetPermissivesMQLink(isUp);
-  }
+void ControlLogic::HandleNewDateTime(long month, long hour, long minute)
+{
+    bool isOk = true;
+    switch(month)
+    {
+      case 11:
+      case 12:
+      case 1:
+      case 2:
+      case 3:
+        break;
+      default:
+        isOk = false;
+    }
+    switch(hour)
+    {
+      case 11:
+      case 12:
+      case 1:
+      case 2:
+      case 3:
+      case 4:
+        break;
+      default:
+        isOk = false;
+    }
+    poolHeater.SetPermissivesDateTime(true);
+}
+
+void ControlLogic::HandleMQTTLinkChange(bool isUp)
+{
+    poolHeater.SetPermissivesMQLink(isUp);
+}

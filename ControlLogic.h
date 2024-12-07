@@ -23,12 +23,10 @@ class ControlLogic
     bool ConnectMQTT();
     void mqcallback(char *topic, byte *payload, unsigned int length);
 
-    void HandleNewPrice(float price);
-    void HandleNewDateTime(uint8_t month, uint8_t hour, uint8_t minute);
+    void HandleNewPrice(std::optional<float> price);
+    void HandleNewSOC(std::optional<float> SOC);
+    void HandleNewDateTime(long month, long hour, long minute);
     void HandleMQTTLinkChange(bool isUp);
-
-    // The current electricity price.  It is optional as if we don't know what it is, it won't be set
-    std::optional<float> moPrice;
 
     WiFiClient espClient;
     PubSubClient mqclient;
