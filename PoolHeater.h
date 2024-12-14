@@ -53,12 +53,14 @@ public:
     bool SOCOk = false;
     bool TimeOk = false;
     bool MqTTLinkOk = false;
+    bool externalFlowMeterOk = false;   // External Flow meter, not switch inside unit
   };
 
   void SetPermissivesPrice(bool isOk);
   void SetPermissivesSOC(bool isOK);
   void SetPermissivesDateTime(bool isOk);
   void SetPermissivesMQLink(bool isOk);
+  void SetPermissivesExternalFlowMeter(bool isOk);
 
   // Check if all the permissives are in a true state.
   bool GetPermissivesOk() const;

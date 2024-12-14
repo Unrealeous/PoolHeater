@@ -20,6 +20,7 @@ const char *topicLowPressureSwitchAlarm           = "PoolHeater/Inputs/LowPressu
 const char *topicHighPressureSwitchAlarm          = "PoolHeater/Inputs/HighPressureSwitch";
 const char *topicWaterFlowPressure                = "PoolHeater/Inputs/WaterFlowPressure";
 
+
 const char *topicDefrost                          = "PoolHeater/Relay/DefrostRelay";
 const char *topicFourWayValveFB                   = "PoolHeater/Relay/FourWayValve";
 const char *topicFanFB                            = "PoolHeater/Relay/FanRelay";
@@ -28,6 +29,7 @@ const char *topicCompressorFB                     = "PoolHeater/Relay/Compressor
 const char *topicPermissivePrice                  = "PoolHeater/Permissive/Price";
 const char *topicPermissiveDateTime               = "PoolHeater/Permissive/DateTime";
 const char *topicPermissiveMQTT                   = "PoolHeater/Permissive/MQTT";
+const char *topicExternalFlowMeter                = "PoolHeater/Permissive/ExteranlFlowMeter";
 
 const char *subPowerwallPrice                     = "Powerwall/Price";
 const char *subPowerwallTime                      = "Powerwall/Time";
@@ -80,8 +82,6 @@ void ControlLogic::Configure()
   // If we can't connect, it won't go further.
   while (!ConnectMQTT());
 
-  HandleMQTTLinkChange(true);
-
   // Start the WIRE (I2C) library to use the poolHeater class
   poolHeater.Configure();
 }
@@ -101,9 +101,13 @@ bool ControlLogic::ConnectMQTT()
           delay(2000);
           count++;
 
-          if (count > 30)
+          if (count > 20)
+          {
+            HandleMQTTLinkChange(false);
             return false;
+          }
       }
+      HandleMQTTLinkChange(true);
   }
 
   if (mqclient.subscribe(subPowerwallPrice, 0))
@@ -148,12 +152,25 @@ void ControlLogic::loop()
   Serial.print(" Fan: ");
   Serial.print(poolHeater.GetFanFB());
   Serial.print(" Compressor: ");
-  Serial.println(poolHeater.GetCompressorFB());
+  Serial.print(poolHeater.GetCompressorFB());
+  Serial.print(" FlowMeterCount: ");
+  Serial.println(mFlowMeterReads);
 
   // We don't want to send this stuff every second, 10 seconds will do
   delayCount = (delayCount + 1) % 10;
   if (!delayCount)
   {
+    // We should have received a number of flow meter readings
+    // After evalating, reset flow meter reads to zero so we'll know when water has stopped
+    // Level Test pulse frequency pulse characteristics: (Hz) = [0.2 * Q] ± 3% (proficiency tests) (Q is flow L / min)
+    if (mFlowMeterReads < 5)
+      poolHeater.SetPermissivesExternalFlowMeter(false);
+    else
+    {
+      poolHeater.SetPermissivesExternalFlowMeter(true);
+    }
+    mFlowMeterReads = 0;
+
     mqclient.publish(topicHeatExchangerThermalCutoffAlarm, BoolToString(poolHeater.GetHeatExchangerThermalCutoffAlarm()));
     mqclient.publish(topicCompressorThermalCutoffAlarm, BoolToString(poolHeater.GetCompressorThermalCutoffAlarm()));
     mqclient.publish(topicLowPressureSwitchAlarm, BoolToString(poolHeater.GetLowPressureSwitchAlarm()));
@@ -168,8 +185,8 @@ void ControlLogic::loop()
     mqclient.publish(topicPermissivePrice, BoolToString(poolHeater.GetPermissivesRawData().PriceOk));
     mqclient.publish(topicPermissiveDateTime, BoolToString(poolHeater.GetPermissivesRawData().TimeOk));
     mqclient.publish(topicPermissiveMQTT, BoolToString(poolHeater.GetPermissivesRawData().MqTTLinkOk));
+    mqclient.publish(topicExternalFlowMeter, BoolToString(poolHeater.GetPermissivesRawData().externalFlowMeterOk));
   }
-
 
   if (poolHeater.AnyAlarmsPresent() || !poolHeater.GetPermissivesOk())
   {
@@ -198,10 +215,10 @@ void ControlLogic::loop()
   // We can sometimes disconnect from MQTT server so reconnect if we have.
   if (!mqclient.connected())
   {
-    // If we can't reconnect, shut down safely.
-    bool connected = ConnectMQTT();
 
-    HandleMQTTLinkChange(connected);
+
+    // If we can't reconnect, shut down safely.
+    ConnectMQTT();
   }
   else
   {
@@ -350,4 +367,9 @@ void ControlLogic::HandleNewDateTime(long month, long hour, long minute)
 void ControlLogic::HandleMQTTLinkChange(bool isUp)
 {
     poolHeater.SetPermissivesMQLink(isUp);
+}
+
+void ControlLogic::HandleFlowMeterRead()
+{
+  mFlowMeterReads += 1;
 }

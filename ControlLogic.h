@@ -19,6 +19,8 @@ class ControlLogic
     // This should be called periodically to do stuff.
     void loop();
 
+    void HandleFlowMeterRead();
+
   private:
     bool ConnectMQTT();
     void mqcallback(char *topic, byte *payload, unsigned int length);
@@ -41,6 +43,8 @@ class ControlLogic
     // When the alarms Set and we have to stop, we want to wait until we see 
     // a lot that is wasn't just a one off.  We do get some spurous readings
     uint16_t mAlarmSetCount = 0;
+
+    uint16_t mFlowMeterReads = 0;
 };
 
 

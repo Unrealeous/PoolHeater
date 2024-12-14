@@ -58,7 +58,7 @@ bool PoolHeater::AnyAlarmsPresent()
                 GetCompressorThermalCutoffAlarm() ||
                 GetLowPressureSwitchAlarm() ||
                 GetHighPressureSwitchAlarm() ||
-                GetWaterFlowSwitchAlarm();
+                GetWaterFlowSwitchAlarm(); 
 
   return result;
 }
@@ -105,10 +105,16 @@ void PoolHeater::SetPermissivesMQLink(bool isOk)
 {
   mPermissives.MqTTLinkOk = isOk;
 }
+void PoolHeater::SetPermissivesExternalFlowMeter(bool isOk)
+{
+  mPermissives.externalFlowMeterOk = isOk;
+}
+
 bool PoolHeater::GetPermissivesOk() const
 {
   return mPermissives.PriceOk && 
          mPermissives.SOCOk &&
          mPermissives.TimeOk && 
-         mPermissives.MqTTLinkOk;
+         mPermissives.MqTTLinkOk &&
+         mPermissives.externalFlowMeterOk;
 }
